@@ -35,7 +35,7 @@ where $\hat{y_i}$ is the estimated value
 
 ## Mean Squared Error (MSE)
 
-$$MSE=\frac{1}{n}\sum_{i=1}^{n}(y_i - \hat{y_i})^2$$
+$$MSE=\frac{1}{n}\sum_{i=1}^{n}(y_i - \hat{y_i})^2$$y
 
 ## Root Mean Squared Error (RMSE)
 Same units as original data.
@@ -112,10 +112,12 @@ library(pROC)
 library(MASS)
 library(ggplot2)
 library(gridExtra)
+library(plyr)
 library(dplyr)
 library(ggfortify)
 library(glmnet)
 library(tidyverse)
+library(Metrics)
 ```
 
 Split data into training and test set
@@ -164,29 +166,39 @@ ggplot(data = plot_ridge_test_pred) +
 
 #median residual value should be close to zero
 median(resid(Ridge_regression))
+#looking at medians are good for comparing models; the smaller the residual the better
 ```
 
 
-# Homework
+# Homework Due Oct. 3rd
 
 ## Lasso
 
 $$Lasso Regression=\sum_{i=1}^{n}(y_i - w_0 - \sum_{j=1}^{p}w_jx_{ij})^2 + \lambda\sum_{j=1}^p|w_j|$$
 2. Create and train model 
 ```{r}
+airq <- airquality
+sampsize <- floor(0.75 * nrow(airq))
+set.seed(543)
+part <- sample(seq_len(nrow(airq)), size = sampsize)
+train <- airq[part,]
+test <- airq[-part,]
+airqreg <- train(Month ~ Temp, train, method ='lm')
 
-```
 
-```{r}
 ```
 
 Examine the residuals 
 ```{r}
-
 #plot the predicted values vs the observed values
-
-
+predictreg <- predict(airqreg, test)
+plot(predictreg, test$Month)
+predtest <- cbind(predictreg, test$Month)
+ggplot(data= predtest)+
+  geom_point(mapping = aes(predictreg, test$Month))
 #median residual value should be close to zero
+resi <- resid(airqreg)
+summary(resi)
 ```
 
 
@@ -229,15 +241,19 @@ pwidth <- ggplot(data = iris, aes(x = Petal.Width, fill = Species)) +
   theme_bw()
 
 grid.arrange(slength, swidth, plength, pwidth)
+
+#
 ```
 
 ```{r}
 LDA <- lda(Species~ Sepal.Length + Sepal.Width + Petal.Length + Petal.Width, 
            data= train_classifier, cv= T)
+#fit a model to predict the class given the parameters
 ```
 
 ```{r}
 LDA
+#lda wants the means to be different; if theyr are the same then you cant use this
 ```
 
 4. Test model on test set 
@@ -246,7 +262,6 @@ LDA
 LDA_predict <- predict(LDA, newdata=test_classifier)
 confusionMatrix(LDA_predict$class, reference = test_classifier$Species)
 ```
-
 
 ```{r}
 # save the predictions in a new variable
@@ -257,6 +272,8 @@ test_classifier <- test_classifier %>%
   rownames_to_column("idx")
 
 predictions_actual <- full_join(predictions,test_classifier, by = "idx" )
+
+#r  review what the meaning of prediction_actual is
 
 # choose the two classes we want to compare, setosa and versicolor
 set_vers_true_labels <- predictions_actual %>% 
@@ -275,6 +292,7 @@ label.ordering = c("versicolor", "setosa"))
 
 perf <- performance(pred,"tpr","fpr")
 plot(perf)
+#every step up is correct; every step to the right is an incorrect prediction
 ```
 
 
@@ -341,6 +359,7 @@ ctrl <- trainControl(method = "repeatedcv", repeats = 15,classProbs = T,
 #predict species based on sepal length
 logistic_regression <- train(Species~ Sepal.Length, data = train_classifier_log, 
                              method = "glm", family= "binomial", trControl = ctrl)
+#logistic regression is part of the 'glm' (generalizing your model) family
 ```
 
 
@@ -365,6 +384,7 @@ legend("bottomright", legend = paste("setosa v versicolor --",
                                      roc(predictor = logistic_regression$pred$setosa,
                                          response = logistic_regression$pred$obs)$auc
 , sep = ""), col = c("blue"), fill = c("blue"))
+# an roc curve giving you an y=x graph means your model is just guessing and it's wrong
 ```
 
 4. Test on an independent set
@@ -407,22 +427,144 @@ ggplot(data = test_classifier_log) +
   geom_line(data = logistic_pred_prob_plot, aes(x = Sepal.Length,
                                                 y = Species_pred.versicolor, col = "versicolor"))+
   ggtitle("Probabilities for classifying species")
-
+#fitted logistic regression lines
 ```
 
 #Homework:
 
 1. Use the Breast Cancer dataset from the mlbench package, and predict whether the cancer is malignant or benign using one of the algorithms we learned about in class. Give some rationale as to why you chose this algorithm. Plot ROC curves, and confusion matrices. If you are choosing a hyperparameter like K or lambda, explain how and why you chose it. 
 
-```{r}
-#libra
-#train
-#test
+Look out for the fact that the data IS NOT CLEAN
 
+
+
+try making a correlation graph
+
+```{r}
+
+data <- BreastCancer %>%
+  na.omit() 
+data$Bl.cromatin <- as.numeric(data$Bl.cromatin)
+data$Cl.thickness <- as.numeric(data$Cl.thickness)
+data$Cell.size <- as.numeric(data$Cell.size)
+data$Cell.shape <- as.numeric(data$Cell.shape)
+data$Marg.adhesion <- as.numeric(data$Marg.adhesion)
+data$Epith.c.size <- as.numeric(data$Epith.c.size)
+data$Bare.nuclei <- as.numeric(data$Bare.nuclei)
+data$Normal.nucleoli <- as.numeric(data$Normal.nucleoli)
+data$Mitoses <- as.numeric(data$Mitoses)
+
+class(data$Bl.cromatin)
+#libra
+samp <- floor(0.75 * nrow(data))
+part <- sample(seq(nrow(data)), size = samp)
+train.bc <- data[part,]
+test.bc <- data[-part,]
+#train
+```
+
+Logistic Regression and K-Fold Cross Validation
+```{r}
 ##ctrl <- trainControl()
 ## <- train(, data = , method = "", trControl = ctrl)
-## predict(, newdata="")
+ctrl <- trainControl(method = "repeatedcv", repeats = 25,classProbs = T,
+                     savePredictions = T)
+breastreg <- train(Class ~ Bl.cromatin, data, method = "glm", family= "binomial", trControl = ctrl)
+predict.bc <- predict(breastreg, newdata = test.bc)
+k.conf <- confusionMatrix(predict.bc, reference = test.bc$Class)
+
+#breastlm <- lm()
+#test
 ```
+
+
+Linear Discriminant Analysis:
+it doesnt follow assumptions
+```{r}
+# Check assumptions of LDA
+
+blcromatin <- ggplot(data = data, aes(x = Bl.cromatin, fill = Class)) + 
+  stat_count(width = 0.5)  +
+  theme_bw()
+
+nucleoli <- ggplot(data = data, aes(x = Normal.nucleoli, fill = Class)) + 
+  stat_count(width = 0.5)  +
+  theme_bw()
+
+nuclei <- ggplot(data = data, aes(x = Bare.nuclei, fill = Class)) + 
+  stat_count(width = 0.5)  +
+  theme_bw()
+
+adhesion <- ggplot(data = data, aes(x = Marg.adhesion, fill = Class)) + 
+  stat_count(width = 0.5)  +
+  theme_bw()
+
+grid.arrange(blcromatin,nucleoli,nuclei, adhesion)
+
+# test for normality
+
+shapiro.test(data$Bl.cromatin)
+shapiro.test(data$Normal.nucleoli)
+shapiro.test(data$Bare.nuclei)
+shapiro.test(data$Marg.adhesion)
+
+## predict(, newdata="")
+lda.bc <- lda(Class ~ Bl.cromatin + Normal.nucleoli + Bare.nuclei + Marg.adhesion, 
+              data = train.bc, cv = T)
+lda.predict <- predict(lda.bc, newdata = test.bc)
+lda.conf <- confusionMatrix(lda.predict$class, reference = test.bc$Class)
+lda.predict
+```
+
+Logistic Regression with Bootstrapping
+```{r}
+ctrl2 <- trainControl(method = "boot", classProbs = T,
+                     savePredictions = T)
+bcreg.boot <- train(Class ~ Bl.cromatin, data, method = "glm", family= "binomial", trControl = ctrl2)
+predict.boot <- predict(bcreg.boot, newdata = test.bc)
+boot.conf <- confusionMatrix(bcreg.boot, reference = test.bc$Class)
+
+```
+
+
+ROC Curve
+```{r}
+roc.lda <- roc(predictor = lda.predict$posterior[,2], response = test.bc$Class)
+roc.kfold <- roc(predictor = breastreg$pred$benign, response =breastreg$pred$obs)
+roc.boot <- roc(predictor = bcreg.boot$pred$benign, response = bcreg.boot$pred$obs)
+
+plot(x = roc.lda$specificities, 
+     y = roc.lda$sensitivities,
+     col= "red", xlim = c(1, 0), type ="l", main = "Linear Discriminant Analysis ROC curve",ylab = "Sensitivity",
+     xlab = "Specificity")
+legend("bottomright", legend = paste("Benign vs Malignant --", 
+                                     roc.lda$auc
+, sep = ""), col = c("red"), fill = c("red"))
+
+plot(x = roc.kfold$specificities, 
+     y = roc.kfold$sensitivities,
+     col= "green", xlim = c(1, 0), type ="l", main = "Logistic Regression K-Fold ROC curve",ylab = "Sensitivity",
+     xlab = "Specificity")
+legend("bottomright", legend = paste("Benign vs Malignant --", 
+                                     roc.kfold$auc
+, sep = ""), col = c("green"), fill = c("green"))
+
+plot(x = roc.boot$specificities, 
+     y = roc.boot$sensitivities,
+     col= "orange", xlim = c(1, 0), type ="l", main = "Logistic Regression with Bootstrapping ROC curve", ylab = "Sensitivity",
+     xlab = "Specificity")
+legend("bottomright", legend = paste("Benign vs Malignant --", 
+                                     roc.boot$auc
+, sep = ""), col = c("orange"), fill = c("orange"))
+
+
+```
+
+For this assignment, I chose to analyze the data by three different models: logistic regresion with k-fold cross validation, Linear Discriminant Analysis and logistic regression with bootstrapping. For the k-fold cross validation, I chose a K of 25. This value was arbitraryly chosed. An LDA was ran however, the data did not fit any of the assumptions of LDA. Lastly, a logistic regression with bootstrapping was ran so that the values chosen would better mimic the actual population. 
+
+Although the LDA had the highest accuracy (95.9%), this test could not be accepted due to the fact that the data did not have a normal distribution, nor did it have class specific means. Both logistic regression has similar accuracy levels (k-fold: 90.1, bootstrapping: 90.0 ), the k-fold model gave a slightly better result in predicting classes. 
+
+
 
 
 References: 
